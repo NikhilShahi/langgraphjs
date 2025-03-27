@@ -15,8 +15,13 @@ import {
   CUAAnnotation,
   CUAConfigurable,
   CUAUpdate,
+  Provider,
 } from "./types.js";
-import { getToolOutputs, isComputerCallToolMessage } from "./utils.js";
+import {
+  getToolOutputs,
+  isComputerCallToolMessage,
+  isFunctionCallToolMessage,
+} from "./utils.js";
 
 /**
  * Routes to the nodeBeforeAction node if a computer call is present
@@ -30,7 +35,9 @@ function takeActionOrEnd(
 ): "nodeBeforeAction" | "createVMInstance" | typeof END {
   const lastMessage = state.messages[state.messages.length - 1];
   const toolOutputs = getToolOutputs(lastMessage);
-  if (!lastMessage || !toolOutputs) {
+  // @ts-expect-error The message does include tool_calls
+  const toolCalls = lastMessage?.tool_calls ?? [];
+  if ((!lastMessage || !toolOutputs) && toolCalls.length === 0) {
     return END;
   }
 
@@ -50,7 +57,10 @@ function takeActionOrEnd(
  */
 function reinvokeModelOrEnd(state: CUAState): "callModel" | typeof END {
   const lastMsg = state.messages[state.messages.length - 1];
-  if (isComputerCallToolMessage(lastMsg)) {
+  if (
+    isComputerCallToolMessage(lastMsg) ||
+    isFunctionCallToolMessage(lastMsg)
+  ) {
     return "callModel";
   }
   return END;
@@ -64,11 +74,31 @@ interface CreateCuaParams<
   StateModifier extends AnnotationRoot<any> = typeof CUAAnnotation
 > {
   /**
+   * The provider to use for the browser instance.
+   * @default "scrapybara"
+   */
+  provider?: Provider;
+
+  /**
    * The API key to use for Scrapybara.
    * This can be provided in the configuration, or set as an environment variable (SCRAPYBARA_API_KEY).
    * @default process.env.SCRAPYBARA_API_KEY
    */
   scrapybaraApiKey?: string;
+
+  /**
+   * The API key to use for Hyperbrowser.
+   * This can be provided in the configuration, or set as an environment variable (HYPERBROWSER_API_KEY).
+   * @default process.env.HYPERBROWSER_API_KEY
+   */
+  hyperbrowserApiKey?: string;
+
+  /**
+   * Parameters to use for configuring the Hyperbrowser session, such as screen dimensions.
+   * For more information on the available parameters, see the [Hyperbrowser API documentation](https://docs.hyperbrowser.ai/sessions/overview/session-parameters).
+   * @default undefined
+   */
+  sessionParams?: Record<string, unknown>;
 
   /**
    * The number of hours to keep the virtual machine running before it times out.
@@ -145,7 +175,10 @@ export function createCua<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   StateModifier extends AnnotationRoot<any> = typeof CUAAnnotation
 >({
+  provider = "scrapybara",
   scrapybaraApiKey,
+  hyperbrowserApiKey,
+  sessionParams,
   timeoutHours = 1.0,
   zdrEnabled = false,
   recursionLimit = 100,
@@ -195,7 +228,10 @@ export function createCua<
   // Configure the graph with the provided parameters
   const configuredGraph = cuaGraph.withConfig({
     configurable: {
+      provider,
       scrapybaraApiKey,
+      hyperbrowserApiKey,
+      sessionParams,
       timeoutHours,
       zdrEnabled,
       authStateId,

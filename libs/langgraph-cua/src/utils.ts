@@ -6,9 +6,29 @@ import {
   BrowserInstance,
   WindowsInstance,
 } from "scrapybara";
+import { Hyperbrowser } from "@hyperbrowser/sdk";
+import { SessionDetail } from "@hyperbrowser/sdk/types";
 import { getEnvironmentVariable } from "@langchain/core/utils/env";
 import { AIMessage, BaseMessage, ToolMessage } from "@langchain/core/messages";
 import { getConfigurationWithDefaults } from "./types.js";
+
+/**
+ * Gets the Hyperbrowser client, using the API key from the graph's configuration object.
+ *
+ * @param {string} apiKey The API key for Hyperbrowser.
+ * @returns {HyperbrowserClient} The Hyperbrowser client.
+ */
+export function getHyperbrowserClient(apiKey: string) {
+  if (!apiKey) {
+    throw new Error(
+      "Hyperbrowser API key not provided. Please provide one in the configurable fields, or set it as an environment variable (HYPERBROWSER_API_KEY)"
+    );
+  }
+  const client = new Hyperbrowser({
+    apiKey,
+  });
+  return client;
+}
 
 /**
  * Gets the Scrapybara client, using the API key from the graph's configuration object.
@@ -35,7 +55,7 @@ export function getScrapybaraClient(apiKey: string): ScrapybaraClient {
  * @param {LangGraphRunnableConfig} config The configuration for the runnable.
  * @returns {Promise<UbuntuInstance | BrowserInstance | WindowsInstance>} The instance.
  */
-export async function getInstance(
+export async function getScrapybaraInstance(
   id: string,
   config: LangGraphRunnableConfig
 ): Promise<UbuntuInstance | BrowserInstance | WindowsInstance> {
@@ -47,6 +67,27 @@ export async function getInstance(
   }
   const client = getScrapybaraClient(scrapybaraApiKey);
   return await client.get(id);
+}
+
+/**
+ * Gets an instance from Hyperbrowser.
+ *
+ * @param {string} id The ID of the instance to get.
+ * @param {LangGraphRunnableConfig} config The configuration for the runnable.
+ * @returns {Promise<SessionDetail>} The instance.
+ */
+export async function getHyperbrowserInstance(
+  id: string,
+  config: LangGraphRunnableConfig
+): Promise<SessionDetail> {
+  const { hyperbrowserApiKey } = getConfigurationWithDefaults(config);
+  if (!hyperbrowserApiKey) {
+    throw new Error(
+      "Hyperbrowser API key not provided. Please provide one in the configurable fields, or set it as an environment variable (HYPERBROWSER_API_KEY)"
+    );
+  }
+  const client = getHyperbrowserClient(hyperbrowserApiKey);
+  return await client.sessions.get(id);
 }
 
 /**
@@ -122,5 +163,20 @@ export function isComputerCallToolMessage(
     message.getType() === "tool" &&
     "type" in message.additional_kwargs &&
     message.additional_kwargs.type === "computer_call_output"
+  );
+}
+
+/**
+ * Checks if a message is a function call tool message.
+ *
+ * @param {BaseMessage} message The message to check.
+ * @returns {boolean} True if the message is a function call tool message, false otherwise.
+ */
+export function isFunctionCallToolMessage(
+  message: BaseMessage
+): message is ToolMessage {
+  return (
+    "type" in message.additional_kwargs &&
+    message.additional_kwargs.type === "function_call_output"
   );
 }

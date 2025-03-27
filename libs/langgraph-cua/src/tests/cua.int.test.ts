@@ -40,20 +40,25 @@ test.skip("Can invoke the computer preview model", async () => {
 
 test("It can use the agent to interact with the browser", async () => {
   let instanceId: string | undefined;
-  const cuaGraph = createCua();
+  const cuaGraph = createCua({ provider: "hyperbrowser", zdrEnabled: true, prompt: `You're an advanced AI computer use assistant. You are utilising a Chrome Browser with internet access.
+              It is already open and running. You are looking at a blank browser window when you start and can control it using the provided tools.
+              If you are on a blank page, you should use the go_to_url tool to navigate to the relevant website, 
+              or if you need to search for something, go to https://www.google.com and search for it.` });
   try {
     const stream = await cuaGraph.stream(
       {
         messages: [
           {
             role: "system",
-            content:
-              "You're an advanced AI computer use assistant. The browser you are using is already initialized, and visiting google.com.",
+            content: `You're an advanced AI computer use assistant. You are utilising a Chrome Browser with internet access.
+              It is already open and running. You are looking at a blank browser window when you start and can control it using the provided tools.
+              If you are on a blank page, you should use the go_to_url tool to navigate to the relevant website, 
+              or if you need to search for something, go to https://www.google.com and search for it.`,
           },
           {
             role: "user",
-            content:
-              "I'm looking for a new camera. Help me find the best one. It should be 4k resolution, by Cannon, and under $1000. I want a digital camera, and I'll be using it mainly for photography.",
+            content: `
+              what is the price of nvidia stock?`,
           },
         ],
       },
@@ -90,6 +95,7 @@ test("It can use the agent to interact with the browser", async () => {
         if (update.callModel?.messages) {
           const message = update.callModel.messages;
           const allOutputs = message.additional_kwargs?.tool_outputs;
+          const toolCalls = message.tool_calls;
           if (allOutputs?.length) {
             const output = allOutputs[allOutputs.length - 1];
             console.log("----CALL MODEL----\n", {
@@ -99,6 +105,13 @@ test("It can use the agent to interact with the browser", async () => {
               },
             });
             continue;
+          } else if (toolCalls?.length) {
+            const toolCall = toolCalls[toolCalls.length - 1];
+            console.log("----CALL MODEL----\n", {
+              FunctionCall: {
+                ...toolCall,
+              },
+            });
           }
           console.log("----CALL MODEL----\n", {
             AIMessage: {
@@ -109,9 +122,10 @@ test("It can use the agent to interact with the browser", async () => {
       }
     }
   } finally {
-    if (instanceId) {
+    console.log("finished test", instanceId);
+    /*if (instanceId) {
       console.log("Stopping instance with ID", instanceId);
       await stopInstance(instanceId);
-    }
+    }*/
   }
 });
